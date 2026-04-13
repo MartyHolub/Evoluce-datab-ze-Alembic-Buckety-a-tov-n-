@@ -87,9 +87,14 @@ async def upload_object(
     if not bucket:
         raise HTTPException(status_code=404, detail="Bucket not found")
 
+    # Sanitise the user-supplied filename to prevent path-traversal attacks.
+    safe_name = os.path.basename(file.filename)
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
     bucket_dir = os.path.join(STORAGE_DIR, str(bucket_id))
     os.makedirs(bucket_dir, exist_ok=True)
-    file_path = os.path.join(bucket_dir, file.filename)
+    file_path = os.path.join(bucket_dir, safe_name)
 
     content = await file.read()
     file_size = len(content)
@@ -99,7 +104,7 @@ async def upload_object(
 
     db_object = Object(
         bucket_id=bucket_id,
-        filename=file.filename,
+        filename=safe_name,
         path=file_path,
         size=file_size,
         user_id=x_user_id,
