@@ -92,9 +92,13 @@ async def upload_object(
     if not safe_name:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    bucket_dir = os.path.join(STORAGE_DIR, str(bucket_id))
+    bucket_dir = os.path.realpath(os.path.join(STORAGE_DIR, str(bucket_id)))
     os.makedirs(bucket_dir, exist_ok=True)
-    file_path = os.path.join(bucket_dir, safe_name)
+    file_path = os.path.realpath(os.path.join(bucket_dir, safe_name))
+
+    # Verify the resolved path stays inside the intended bucket directory.
+    if not file_path.startswith(bucket_dir + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid filename")
 
     content = await file.read()
     file_size = len(content)
@@ -115,7 +119,7 @@ async def upload_object(
     bucket.current_storage_bytes += file_size
     bucket.count_write_requests += 1
 
-    is_internal = getattr(request.state, "is_internal", False) if request else False
+    is_internal = getattr(request.state, "is_internal", False)
     if is_internal:
         bucket.internal_transfer_bytes += file_size
     else:
@@ -137,7 +141,7 @@ def list_objects(bucket_id: int, db: Session = Depends(get_db)):
 
     objects = (
         db.query(Object)
-        .filter(Object.bucket_id == bucket_id, Object.is_deleted == False)  # noqa: E712
+        .filter(Object.bucket_id == bucket_id, Object.is_deleted.is_(False))
         .all()
     )
     return ObjectListResponse(objects=objects, count=len(objects))
@@ -158,7 +162,7 @@ async def download_object(
         .filter(
             Object.id == object_id,
             Object.bucket_id == bucket_id,
-            Object.is_deleted == False,  # noqa: E712
+            Object.is_deleted.is_(False),
         )
         .first()
     )
@@ -196,7 +200,7 @@ def delete_object(
         .filter(
             Object.id == object_id,
             Object.bucket_id == bucket_id,
-            Object.is_deleted == False,  # noqa: E712
+            Object.is_deleted.is_(False),
         )
         .first()
     )
